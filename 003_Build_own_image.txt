@@ -51,7 +51,8 @@ ff9d331bcce1   nginx-own:v1   "nginx -g 'daemon of…"   25 seconds ago   Up 23 
 
 
 Как вы могли заметить, в Dockerfile'е мы указали volumes'ы. Что это значит?
-Это значит, что при запуске контейнера у нас есть доступ к указанным директориям контейнера.
+Это значит, что при запуске контейнера будет происходить автоматическое монтирование
+указанных директорий
 
 Вот куда монтиру.тся данные директории
 
@@ -71,7 +72,7 @@ $ docker container inspect nginx-server | grep Mounts -A 20
                 "Type": "volume",
                 "Name": "d0d182fe8aeaa5485fe78d1b9e6bbe22a3d235d844a72d053be6ee950fee2e12",
                 "Source": "/var/lib/docker/volumes/d0d182fe8aeaa5485fe78d1b9e6bbe22a3d235d844a72d053be6ee950fee2e12/_data",
-                "Destination": "/var/www/html,",
+                "Destination": "/var/www/html",
                 "Driver": "local",
                 "Mode": "",
                 "RW": true,
@@ -98,6 +99,16 @@ drwxr-xr-x 2 root root 4096 мая 27 17:23 sites-enabled
 drwxr-xr-x 2 root root 4096 мая 27 17:23 snippets
 -rw-r--r-- 1 root root  664 мая 29  2021 uwsgi_params
 -rw-r--r-- 1 root root 3071 мая 29  2021 win-utf
+
+$ sudo ls -l /var/lib/docker/volumes/d0d182fe8aeaa5485fe78d1b9e6bbe22a3d235d844a72d053be6ee950fee2e12/_data
+total 4
+-rw-r--r-- 1 root root 612 мая 27 18:31 index.nginx-debian.html
+
+
+Такой путь не очень то удобный. Поэтому можно это изменить.
+
+$ docker container run --name nginx-server-2 -p 80:80 -p 443:443 -v mounts:/etc/nginx -d nginx-own:v1
+06619a74b44a2c64fe25ee53121d1a99845ec7d832ce3084dcf186e633caed18
 
 
 

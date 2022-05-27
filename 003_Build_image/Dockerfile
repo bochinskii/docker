@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install curl gnupg2 ca-certificates lsb-release de
 
 RUN apt-get update; apt-get install nginx -y
 
-VOLUME /var/www/html, /etc/nginx
+VOLUME /var/www/html /etc/nginx
 
 EXPOSE 80/tcp 443/tcp
 
