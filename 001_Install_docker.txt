@@ -1,0 +1,18 @@
+----------------
+Установка Docker
+----------------
+
+Устанавливется легко.
+
+https://docs.docker.com/engine/install/ubuntu/
+
+Для удобства, можно добавить текущего пользователя в группу - "docker", чтобы
+не выполнять команды через sudo.
+
+$ cat /etc/group | grep docker
+docker:x:999:
+
+$ sudo usermod -aG docker $USER
+
+$ cat /etc/group | grep docker
+docker:x:999:denisb

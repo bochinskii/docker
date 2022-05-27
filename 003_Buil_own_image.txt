@@ -1,0 +1,147 @@
+------------------------------------------
+Сборка собственного образа из Dockerfile'а
+------------------------------------------
+
+https://docs.docker.com/engine/reference/builder/
+
+$ mkdir ./003_Build_image; cd ./003_Build_image
+
+В данной директории есть файл - Dockerfile. С помощью него мы будем строить образ,
+в котором будет установлен nginx.
+
+
+Как мы видим у нас только два образа
+
+$ docker image ls
+
+REPOSITORY   TAG       IMAGE ID       CREATED      SIZE
+mysql        latest    b2500a44757f   3 days ago   524MB
+nginx        latest    de2543b9436b   9 days ago   142MB
+
+Посмтроим с помощью нашего докер файла собственный образ.
+
+$ docker build -t nginx-own:v1 .
+
+...
+
+Вот у нас появился наш собственный образ
+
+$ docker images
+
+REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+nginx-own    v1        68ad82635ac3   5 seconds ago   263MB
+mysql        latest    b2500a44757f   3 days ago      524MB
+nginx        latest    de2543b9436b   9 days ago      142MB
+debian       latest    c4905f2a4f97   2 weeks ago     124MB
+
+Запустим контейнер из него
+
+$ docker container run --name nginx-server -p 80:80 -p 443:443 -d nginx-own:v1
+de699599ccf6f27fcae3c963479d60af36ff449527210ddfbdd10a48499dd7e6
+
+$ docker ps
+CONTAINER ID   IMAGE          COMMAND                  CREATED         STATUS         PORTS                                                                      NAMES
+de699599ccf6   nginx-own:v1   "nginx -g 'daemon of…"   9 minutes ago   Up 9 minutes   0.0.0.0:80->80/tcp, :::80->80/tcp, 0.0.0.0:443->443/tcp, :::443->443/tcp   nginx-server
+
+
+Все получилось.
+
+
+------------------------------------------
+Создание собственного образа из контейнера
+------------------------------------------
+
+У нас есть запущенный контейнер. Давайте что-то там изменим из него построим еще один образ
+
+$ docker container exec -it nginx-server bash
+
+root@de699599ccf6:/# echo "<h1>It is works</h1>" > /var/www/html/index.html
+root@de699599ccf6:/#exit
+
+Создаем образ из контейнера
+
+$ docker container commit nginx-server nginx-own:v2
+
+$ docker image ls
+REPOSITORY   TAG       IMAGE ID       CREATED          SIZE
+nginx-own    v2        80c30e9eb466   46 seconds ago   263MB
+nginx-own    v1        68ad82635ac3   19 minutes ago   263MB
+mysql        latest    b2500a44757f   3 days ago       524MB
+nginx        latest    de2543b9436b   9 days ago       142MB
+debian       latest    c4905f2a4f97   2 weeks ago      124MB
+
+Запустим контейнер из нашего "второго" образа
+
+$ docker container run --name nginx-server-v2 -p 81:80 -p 444:443 -d nginx-own:v2
+97e9657f8a5c5c1eab3afc3847c2c0c03e5bd20aa2410e46134e739b881a3078
+
+$ docker ps
+CONTAINER ID   IMAGE          COMMAND                  CREATED          STATUS          PORTS                                                                      NAMES
+97e9657f8a5c   nginx-own:v2   "nginx -g 'daemon of…"   42 seconds ago   Up 39 seconds   0.0.0.0:81->80/tcp, :::81->80/tcp, 0.0.0.0:444->443/tcp, :::444->443/tcp   nginx-server-v2
+de699599ccf6   nginx-own:v1   "nginx -g 'daemon of…"   19 minutes ago   Up 19 minutes   0.0.0.0:80->80/tcp, :::80->80/tcp, 0.0.0.0:443->443/tcp, :::443->443/tcp   nginx-server
+
+Все получилось.
+
+-----------------------------------------------------------------------
+Бонус:
+
+Если нужно изменить таг образа, то
+
+$ docker tag nginx-own:v1 nginx-own:v1.0.0
+
+$ docker image ls
+
+REPOSITORY   TAG       IMAGE ID       CREATED          SIZE
+nginx-own    v2        80c30e9eb466   5 minutes ago    263MB
+nginx-own    v1        68ad82635ac3   24 minutes ago   263MB
+nginx-own    v1.0.0    68ad82635ac3   24 minutes ago   263MB
+mysql        latest    b2500a44757f   3 days ago       524MB
+nginx        latest    de2543b9436b   9 days ago       142MB
+debian       latest    c4905f2a4f97   2 weeks ago      124MB
+
+Как вы видите, на самом деле таг не изменяется, а делается копия образа с новым тагом.
+
+-----------------------------------------------------------------------------
+
+
+---------------------------------
+Выгрузить свой образ в Docker Hub
+---------------------------------
+
+Создаем репозиторий в GitHub.
+
+Его имя будет:
+
+<username>/<image>
+
+В нашем случае - bochinskii/nginx-own
+
+Логинимся
+
+$ docker login
+
+Login with your Docker ID to push and pull images from Docker Hub. If you don't have a Docker ID, head over to https://hub.docker.com to create one.
+Username: bochinskii
+Password:
+WARNING! Your password will be stored unencrypted in /home/denisb/.docker/config.json.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/engine/reference/commandline/login/#credentials-store
+
+Login Succeeded
+
+Изменяем имя нашему образу
+
+$ docker tag nginx-own:v1 bochinskii/nginx-own:v1
+
+Теперь делаем push в dockerHub
+
+$ docker push bochinskii/nginx-own:v1
+
+The push refers to repository [docker.io/bochinskii/nginx-own]
+16130962280d: Pushed
+cc36a4881e21: Pushed
+78658088978a: Pushed
+v1: digest: sha256:d8181aec3c4bfea39e1de906a901131acbadfb319b79ce8f7668ce851646745e size: 953
+
+
+--------------------------
