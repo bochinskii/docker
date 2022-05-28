@@ -105,10 +105,102 @@ total 4
 -rw-r--r-- 1 root root 612 мая 27 18:31 index.nginx-debian.html
 
 
-Такой путь не очень то удобный. Поэтому можно это изменить.
+Не очень удобно использовать в качестве пути такие имена volums'ов, поэтому можно это изменить.
+Запустим еще один контейнер, но укажим название volumes'ов (nginx, html). Эти названия
+произвольные.
 
-$ docker container run --name nginx-server-2 -p 80:80 -p 443:443 -v mounts:/etc/nginx -d nginx-own:v1
-06619a74b44a2c64fe25ee53121d1a99845ec7d832ce3084dcf186e633caed18
+$ docker container run --name nginx-server-2 -p 8080:80 -p 4433:443 -v html:/var/www/html -v nginx:/etc/nginx -d nginx-own:v1
+
+947b342193c0ff8f5d0bae91fb8451e7c9ed1e28b178fa37110101104bf7124c
+
+$ docker container inspect nginx-server-2 | grep Mounts -A 20
+        "Mounts": [
+            {
+                "Type": "volume",
+                "Name": "nginx",
+                "Source": "/var/lib/docker/volumes/nginx/_data",
+                "Destination": "/etc/nginx",
+                "Driver": "local",
+                "Mode": "z",
+                "RW": true,
+                "Propagation": ""
+            },
+            {
+                "Type": "volume",
+                "Name": "html",
+                "Source": "/var/lib/docker/volumes/html/_data",
+                "Destination": "/var/www/html",
+                "Driver": "local",
+                "Mode": "z",
+                "RW": true,
+                "Propagation": ""
+            }
+
+$ sudo ls -l /var/lib/docker/volumes/nginx/_data
+total 64
+drwxr-xr-x 2 root root 4096 мая 29  2021 conf.d
+-rw-r--r-- 1 root root 1125 мая 29  2021 fastcgi.conf
+-rw-r--r-- 1 root root 1055 мая 29  2021 fastcgi_params
+-rw-r--r-- 1 root root 2837 мая 29  2021 koi-utf
+-rw-r--r-- 1 root root 2223 мая 29  2021 koi-win
+-rw-r--r-- 1 root root 3957 мая 29  2021 mime.types
+drwxr-xr-x 2 root root 4096 мая 29  2021 modules-available
+drwxr-xr-x 2 root root 4096 мая 28 08:02 modules-enabled
+-rw-r--r-- 1 root root 1447 мая 29  2021 nginx.conf
+-rw-r--r-- 1 root root  180 мая 29  2021 proxy_params
+-rw-r--r-- 1 root root  636 мая 29  2021 scgi_params
+drwxr-xr-x 2 root root 4096 мая 28 08:02 sites-available
+drwxr-xr-x 2 root root 4096 мая 28 08:02 sites-enabled
+drwxr-xr-x 2 root root 4096 мая 28 08:02 snippets
+-rw-r--r-- 1 root root  664 мая 29  2021 uwsgi_params
+-rw-r--r-- 1 root root 3071 мая 29  2021 win-utf
+
+$ sudo ls -l /var/lib/docker/volumes/html/_data
+total 4
+-rw-r--r-- 1 root root 612 мая 27 18:31 index.nginx-debian.html
+
+-------------------------------------------------------------------------------------
+Заметка:
+
+Кстати, не обязательно собирать образ с volumes'ами, чтобы иметь возможность делать
+проброс в хостовую машину (-v). Если вы указываете volumes'ы в Dockerfile'е, то
+просто идет автоматическое монтирование volumes'ов.
+
+------------------------------------------------------------------------------------
+
+Посмотреть каие volumes'ы есть (при удалении контейнера volumes'ы НЕ удаляются).
+
+$ docker volume ls
+DRIVER    VOLUME NAME
+local     b7b26c8db23775411cd058e673474c537b8386a11a905e0317925225da7b1ef3
+local     d0d182fe8aeaa5485fe78d1b9e6bbe22a3d235d844a72d053be6ee950fee2e12
+local     html
+local     nginx
+
+Посмотреть подробную информацию о volume'е
+
+$ docker volume inspect html
+[
+    {
+        "CreatedAt": "2022-05-28T08:08:05+03:00",
+        "Driver": "local",
+        "Labels": null,
+        "Mountpoint": "/var/lib/docker/volumes/html/_data",
+        "Name": "html",
+        "Options": null,
+        "Scope": "local"
+    }
+]
+
+
+Когда удалите конетйнеры, можно удалить volumes'ы так
+
+$ docker volume rm nginx
+
+или все разом
+
+$ docker volume prune
+
 
 
 
@@ -137,12 +229,13 @@ debian       latest    c4905f2a4f97   2 weeks ago      124MB
 
 Запустим контейнер из нашего "второго" образа
 
-$ docker container run --name nginx-server-v2 -p 81:80 -p 444:443 -d nginx-own:v2
+$ docker container run --name nginx-server-3 -p 81:80 -p 444:443 -d nginx-own:v2
 97e9657f8a5c5c1eab3afc3847c2c0c03e5bd20aa2410e46134e739b881a3078
 
 $ docker ps
 CONTAINER ID   IMAGE          COMMAND                  CREATED          STATUS          PORTS                                                                      NAMES
-97e9657f8a5c   nginx-own:v2   "nginx -g 'daemon of…"   42 seconds ago   Up 39 seconds   0.0.0.0:81->80/tcp, :::81->80/tcp, 0.0.0.0:444->443/tcp, :::444->443/tcp   nginx-server-v2
+97e9657f8a5c   nginx-own:v2   "nginx -g 'daemon of…"   42 seconds ago   Up 39 seconds   0.0.0.0:81->80/tcp, :::81->80/tcp, 0.0.0.0:444->443/tcp, :::444->443/tcp   nginx-server-3
+947b342193c0   nginx-own:v1   "nginx -g 'daemon of…"   25 minutes ago   Up 25 minutes   0.0.0.0:8080->80/tcp, :::80->80/tcp, 0.0.0.0:4433->443/tcp, :::4433->443/tcp   nginx-server-2
 de699599ccf6   nginx-own:v1   "nginx -g 'daemon of…"   19 minutes ago   Up 19 minutes   0.0.0.0:80->80/tcp, :::80->80/tcp, 0.0.0.0:443->443/tcp, :::443->443/tcp   nginx-server
 
 Все получилось.
