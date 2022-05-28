@@ -1,0 +1,154 @@
+---------------------------------
+Создание LEMP Stack'а. Docker way
+---------------------------------
+
+Рассмотрим создание LEMP стэкана примере.
+
+$ mkdir ./004_Create_lemp_stack; cd ./004_Create_lemp_stack
+
+$ mkdir docker_way; cd ./docker_way
+
+
+https://hub.docker.com/_/mysql
+
+https://hub.docker.com/_/php
+
+https://hub.docker.com/_/nginx
+
+https://hub.docker.com/_/phpmyadmin
+
+
+Создадим volume - site, в котором будут лежать тестовые файлы сайта (index.html, info.php,
+volume - nginxconfigd, где рассположится конфигурационный файл тестового сайта.
+Так же создадим остальные volumes'ы в которые мы смонируем инетресующие нас директории.
+
+
+$ docker volume create site
+
+$ docker volume create nginxconfigd
+
+$ docker volume create mysqlconfigd
+
+$ docker volume create mysqldbs
+
+
+Скопируем тестовые файлы
+
+$ sudo cp files/{index.html,info.php} /var/lib/docker/volumes/site/_data
+
+$ sudo cp files/default.conf /var/lib/docker/volumes/nginxconfigd/_data
+
+
+Запустим контейнер mysql сервера
+
+$ docker container run --name mysql -e MYSQL_ROOT_PASSWORD=P@ssw0rd12345 -v mysqlconfigd:/etc/mysql/conf.d -v mysqldbs:/var/lib/mysql -d mysql
+
+
+Теперь можно запустить php fpm контейнер. Обратите внимание, что мы сделали связь (--link) между
+двумя контенерами. Это для того, чтобы phpfpm знал где mysql севрер.
+
+$ docker container run --name phpfpm --link mysql -d -v site:/var/www/html php:8.0-fpm
+
+
+Теперь запустим web севрер (nginx). Ему тоже нужна связь, но уже с phpfpm контейнером
+
+$ docker container run --name nginx --link phpfpm -d -v site:/var/www/html -v nginxconfigd:/etc/nginx/conf.d -p 80:80 nginx
+
+
+Так же, опиционально мы запустили php my admin
+
+$ docker run --name phpmyadmin --link mysql -e PMA_HOST=mysql -d -p 8080:80 phpmyadmin
+
+
+
+
+$ docker ps
+
+CONTAINER ID   IMAGE         COMMAND                  CREATED          STATUS          PORTS                                   NAMES
+4f4b7e163976   phpmyadmin    "/docker-entrypoint.…"   39 seconds ago   Up 38 seconds   0.0.0.0:8080->80/tcp, :::8080->80/tcp   phpmyadmin
+8edc24f12c08   nginx         "/docker-entrypoint.…"   11 minutes ago   Up 11 minutes   0.0.0.0:80->80/tcp, :::80->80/tcp       nginx
+65198cb82ca0   php:8.0-fpm   "docker-php-entrypoi…"   12 minutes ago   Up 12 minutes   9000/tcp                                phpfpm
+7549dd08910a   mysql         "docker-entrypoint.s…"   13 minutes ago   Up 13 minutes   3306/tcp, 33060/tcp                     mysql
+
+
+
+Вот примеры того, как делается связь между контенерами
+
+$ docker container exec -it nginx cat /etc/hosts
+
+...
+
+172.17.0.3	phpfpm 65198cb82ca0
+172.17.0.4	8edc24f12c08
+
+
+$ docker container exec -it phpmyadmin cat /etc/hosts
+
+...
+
+172.17.0.2	mysql 7549dd08910a
+172.17.0.5	4f4b7e163976
+
+Все, можно проверять. Все работет.
+
+
+
+Можно удалить все контейнеры.
+
+$ docker container stop `docker ps -q`
+
+$ docker container rm `docker ps -a -q`
+
+Так же удалим volumes'ы касательно mysql севрера т.к. там остались базы данных.
+А нам, нужен "чистый" контейнер с базой данных.
+
+$ docker volume rm mysqldbs
+
+$ docker volume rm mysqlconfigd
+
+
+
+$ docker network ls
+
+NETWORK ID     NAME      DRIVER    SCOPE
+26224b5a282e   bridge    bridge    local
+0f1fd6a89cbf   host      host      local
+256242ca06b3   none      null      local
+
+
+$ docker network create lemp --driver bridge
+
+
+$ docker network ls
+
+NETWORK ID     NAME      DRIVER    SCOPE
+26224b5a282e   bridge    bridge    local
+0f1fd6a89cbf   host      host      local
+01f14c38a28c   lemp      bridge    local
+256242ca06b3   none      null      local
+
+
+$ docker container run --name mysql --network lemp -e MYSQL_ROOT_PASSWORD=P@ssw0rd12345 -v mysqlconfigd:/etc/mysql/conf.d -v mysqldbs:/var/lib/mysql -d mysql
+
+$ docker container run --name phpfpm --network lemp -d -v site:/var/www/html php:8.0-fpm
+
+$ docker container run --name nginx --network lemp -d -v site:/var/www/html -v nginxconfigd:/etc/nginx/conf.d -p 80:80 nginx
+
+$ docker run --name phpmyadmin --network lemp -e PMA_HOST=mysql -d -p 8080:80 phpmyadmin
+
+
+
+-----------------------------------------
+Создание LEMP Stack'а. Docker Compose way
+-----------------------------------------
+
+Как мы видили, есть контейнеры к котором нужно делать связь (--link). Мы это делаем
+вручную, что не удобно. Можно это автоматизировать с помощью docker compose.
+
+cd ../docker_way
+
+
+
+
+
+-------------------
