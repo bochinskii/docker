@@ -38,10 +38,13 @@ $ sudo cp files/{index.html,info.php} /var/lib/docker/volumes/site/_data
 
 $ sudo cp files/default.conf /var/lib/docker/volumes/nginxconfigd/_data
 
+----------------------------------------------
+Запуск связанных контейнеров с помощью --link
+---------------------------------------------
 
 Запустим контейнер mysql сервера
 
-$ docker container run --name mysql -e MYSQL_ROOT_PASSWORD=P@ssw0rd12345 -v mysqlconfigd:/etc/mysql/conf.d -v mysqldbs:/var/lib/mysql -d mysql
+$ docker container run --name mysql -e MYSQL_ROOT_PASSWORD=P@ssw0rd12345 -v mysqlconfigd:/etc/mysql/conf.d -v mysqldbs:/var/lib/mysql -d mysql:8.0
 
 
 Теперь можно запустить php fpm контейнер. Обратите внимание, что мы сделали связь (--link) между
@@ -52,12 +55,12 @@ $ docker container run --name phpfpm --link mysql -d -v site:/var/www/html php:8
 
 Теперь запустим web севрер (nginx). Ему тоже нужна связь, но уже с phpfpm контейнером
 
-$ docker container run --name nginx --link phpfpm -d -v site:/var/www/html -v nginxconfigd:/etc/nginx/conf.d -p 80:80 nginx
+$ docker container run --name nginx --link phpfpm -d -v site:/var/www/html -v nginxconfigd:/etc/nginx/conf.d -p 80:80 nginx:1.21
 
 
 Так же, опиционально мы запустили php my admin
 
-$ docker run --name phpmyadmin --link mysql -e PMA_HOST=mysql -d -p 8080:80 phpmyadmin
+$ docker run --name phpmyadmin --link mysql -e PMA_HOST=mysql -d -p 8080:80 phpmyadmin:5.2
 
 
 
@@ -91,6 +94,16 @@ $ docker container exec -it phpmyadmin cat /etc/hosts
 
 Все, можно проверять. Все работет.
 
+--------------------------------------------------------
+Запуск связанных контейнеров в отдельной сети
+------------------------------------------------
+
+https://docs.docker.com/network/bridge/
+
+
+Как мы видили, есть контейнеры к котором нужно делать связь (--link). Мы это делаем
+вручную, что не удобно. Можно это автоматизировать с помощью создания отдельной
+сети (network) и запуск контейнеров там.
 
 
 Можно удалить все контейнеры.
@@ -105,6 +118,12 @@ $ docker container rm `docker ps -a -q`
 $ docker volume rm mysqldbs
 
 $ docker volume rm mysqlconfigd
+
+Пересоздадим удаленные volumes'ы
+
+$ docker volume create mysqldbs
+
+$ docker volume create mysqlconfigd
 
 
 
@@ -128,24 +147,163 @@ NETWORK ID     NAME      DRIVER    SCOPE
 256242ca06b3   none      null      local
 
 
-$ docker container run --name mysql --network lemp -e MYSQL_ROOT_PASSWORD=P@ssw0rd12345 -v mysqlconfigd:/etc/mysql/conf.d -v mysqldbs:/var/lib/mysql -d mysql
+$ docker container run --name mysql --network lemp -e MYSQL_ROOT_PASSWORD=P@ssw0rd12345 -v mysqlconfigd:/etc/mysql/conf.d -v mysqldbs:/var/lib/mysql -d mysql:8.0
 
 $ docker container run --name phpfpm --network lemp -d -v site:/var/www/html php:8.0-fpm
 
-$ docker container run --name nginx --network lemp -d -v site:/var/www/html -v nginxconfigd:/etc/nginx/conf.d -p 80:80 nginx
+$ docker container run --name nginx --network lemp -d -v site:/var/www/html -v nginxconfigd:/etc/nginx/conf.d -p 80:80 nginx.1.21
 
-$ docker run --name phpmyadmin --network lemp -e PMA_HOST=mysql -d -p 8080:80 phpmyadmin
+$ docker container run --name phpmyadmin --network lemp -e PMA_HOST=mysql -d -p 8080:80 phpmyadmin:5.2
 
+
+
+Можно удалить все контейнеры и volumes'ы
+
+$ docker container stop `docker ps -q`
+
+$ docker container rm `docker ps -a -q`
+
+
+$ docker volume rm `docker volume ls -q`
 
 
 -----------------------------------------
 Создание LEMP Stack'а. Docker Compose way
 -----------------------------------------
 
-Как мы видили, есть контейнеры к котором нужно делать связь (--link). Мы это делаем
-вручную, что не удобно. Можно это автоматизировать с помощью docker compose.
+https://docs.docker.com/engine/reference/commandline/compose/
 
-cd ../docker_way
+https://docs.docker.com/compose/compose-file/compose-file-v3/
+
+Как вы заметили, мы запускаем контейнера с определенной последовательностью.
+Причем делаем 4 команды (создание 4-ех контейнеров). А что если контейнеров
+больше и взаимосвязи между ними сложнее. Есть выход. Запускать контейнеры с
+помощью docker compose.
+
+$ cd ../docker_way
+
+В данной диреткории мы создадим файл - docker-compose.yml. С его содержимым вы
+можете ознакомиться самостоятельно.
+
+Заранее создадим все volumes'ы. Это конечно не обязательно, но мы хотим заранее
+скопировать тестовый файлы сайта и конфиурации web сервера. Особенно важно конфигруация
+web сервер т.к. если мы ее скопируем после поднятия nginx, то нам придется перезапускать
+этот контейнер.
+
+$ docker volume create mysqlconfigd
+
+$ docker volume create mysqldbs
+
+$ docker volume create nginxconfigd
+
+$ docker volume create site
+
+
+$ docker volume ls
+DRIVER    VOLUME NAME
+local     mysqlconfigd
+local     mysqldbs
+local     nginxconfigd
+local     site
+
+Указать composer'у использовать уже созданные volumes'ы мы можем с помощью
+параметра - "external: true" в секции - volumes
+
+volumes:
+  mysqldbs:
+    external: true
+  mysqlconfigd:
+    external: true
+  site:
+    external: true
+  nginxconfigd:
+    external: true
+
+Стоит отметить, что если compose будет автоматически создавать volumes'ы (убрать парамметр -
+"external: true"), то он добавит к их именам преффикс имени директории в которой
+находится docker-compose.yml файл т.е. в нашем случае - docker_compose_way.
+Или, если мы передадим опцию -p <название проекта> при выполнении команды - up,
+то в качестве проффикса будет название проекта.
+
+Скопируем все необходимые файлы
+
+$ sudo cp files/in* /var/lib/docker/volumes/site/_data
+
+$ sudo cp files/*.conf /var/lib/docker/volumes/nginxconfigd/_data
+
+
+
+Так же не забудьте создать network с именем - lemp, если вы ее вдруг удалили в прошлый раз
+
+$ docker network create lemp --driver bridge
+
+Дело в том, что мы будем использовать уже созданную сеть.
+Это указывается параметром - "external: true" в секции networks
+
+networks:
+  lemp:
+    external: true
+    driver: bridge
+
+Если этот параметр убрать, то compose автоматически создаст network при выполнении
+комманды - up. Имя этой сети будет состоять из с преффикса: имени проекта или
+директории в которой лежит файл - docker-compose.yml и названия (в нашем случае - lemp).
+
+Отметим, что мы указали пароль пользователя root к базе данных в отдельном файле (env_file)
+вместо того, чтобы передаьть его с помощью enviroment. Это способ не указывать пароль
+в docker-compose.yml файле, если это не нужно.
+
+Так же отметим, что в контейнере mysql мы используем проверку работоспособности - healthcheck.
+
+Еще отметим, что мы часто используем depends_on. Это значит, что одни контейнеры должны запускаться
+только после других. При этом если это необходимо запускаем контейнеры после проверки
+healthcheck.
+
+
+
+Запускаем.
+
+$ docker compose -p bochinskii up -d
+
+[+] Running 4/4
+ ⠿ Container bochinskii-mysql-1       Healthy                                                                                                                             87.0s
+ ⠿ Container bochinskii-phpfpm-1      Started                                                                                                                             87.1s
+ ⠿ Container bochinskii-phpmyadmin-1  Started                                                                                                                              4.5s
+ ⠿ Container bochinskii-nginx-1       Started                                                                                                                             86.9s
+
+$ docker compose -p bochinskii ps
+NAME                      COMMAND                  SERVICE             STATUS              PORTS
+bochinskii-mysql-1        "docker-entrypoint.s…"   mysql               running (healthy)   33060/tcp
+bochinskii-nginx-1        "/docker-entrypoint.…"   nginx               running             0.0.0.0:80->80/tcp, :::80->80/tcp
+bochinskii-phpfpm-1       "docker-php-entrypoi…"   phpfpm              running             9000/tcp
+bochinskii-phpmyadmin-1   "/docker-entrypoint.…"   phpmyadmin          running             0.0.0.0:8080->80/tcp, :::8080->80/tcp
+
+Все работает.
+
+Так можно удалить контейнеры разом
+
+$ docker compose -p bochinskii stop
+
+[+] Running 4/4
+ ⠿ Container bochinskii-phpmyadmin-1  Stopped                                                                                                                              2.6s
+ ⠿ Container bochinskii-nginx-1       Stopped                                                                                                                              1.7s
+ ⠿ Container bochinskii-phpfpm-1      Stopped                                                                                                                              1.5s
+ ⠿ Container bochinskii-mysql-1       Stopped
+
+$ docker compose -p bochinskii rm
+
+? Going to remove bochinskii-nginx-1, bochinskii-phpmyadmin-1, bochinskii-phpfpm-1, bochinskii-mysql-1 Yes
+[+] Running 4/4
+ ⠿ Container bochinskii-mysql-1       Removed                                                                                                                              0.2s
+ ⠿ Container bochinskii-nginx-1       Removed                                                                                                                              0.2s
+ ⠿ Container bochinskii-phpmyadmin-1  Removed                                                                                                                              0.2s
+ ⠿ Container bochinskii-phpfpm-1      Removed
+
+
+
+
+
+
 
 
 

@@ -1,0 +1,94 @@
+$ vagrant up
+
+$ vagrant status
+Current machine states:
+
+node-001                  running (virtualbox)
+node-002                  running (virtualbox)
+node-003                  running (virtualbox)
+
+$ vagrant ssh node-001
+
+$ vagrant halth
+
+
+
+
+
+
+(node-001) $ docker swarm init --advertise-addr 192.168.0.201
+Swarm initialized: current node (jqdm0jqwra2kp4153pp5rai1x) is now a manager.
+
+To add a worker to this swarm, run the following command:
+
+    docker swarm join --token SWMTKN-1-4vh8l0txml190xmlz3lxoyqcveizf0i5rugs5yt9s7i2d3fzjp-43iatj4dd3br2dpywf235gc5a 192.168.0.201:2377
+
+To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
+
+
+(node-001) $ docker swarm join-token manager
+To add a manager to this swarm, run the following command:
+
+    docker swarm join --token SWMTKN-1-4vh8l0txml190xmlz3lxoyqcveizf0i5rugs5yt9s7i2d3fzjp-12ik073sknxqjcs3g1u8ncrja 192.168.0.201:2377
+
+
+
+
+(node-002) $ docker swarm join --token SWMTKN-1-4vh8l0txml190xmlz3lxoyqcveizf0i5rugs5yt9s7i2d3fzjp-12ik073sknxqjcs3g1u8ncrja 192.168.0.201:2377
+This node joined a swarm as a manager.
+
+(node-003) $ docker swarm join --token SWMTKN-1-4vh8l0txml190xmlz3lxoyqcveizf0i5rugs5yt9s7i2d3fzjp-12ik073sknxqjcs3g1u8ncrja 192.168.0.201:2377
+This node joined a swarm as a manager.
+
+
+
+Посмотреть состояние кластера (можно на любой ноде)
+
+(node-00*) $ docker node ls
+ID                            HOSTNAME   STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+jqdm0jqwra2kp4153pp5rai1x *   node-001   Ready     Active         Leader           20.10.16
+j1gz7sgs3y36791nqz0rb4rc5     node-002   Ready     Active         Reachable        20.10.16
+svi979yjgea1l9kscvmuj0e7n     node-003   Ready     Active         Reachable        20.10.16
+
+
+
+
+
+-----------------------------------------------------------------
+Заметка:
+
+Вот эти порты использует кластер. Они должны быть открыты:
+2377/tcp
+7946/tcp
+7946/udp
+4889/udp
+-------------------------------------------------------------
+
+-------------------------------------------------------------------------
+Заметка:
+
+Чтобы лидер роя не запускал контейнеры, а был только управляющей машино
+
+(node-001) $ docker node update --availability drain node-001
+
+
+Опять вернуть ему способность запускать контейнеры
+
+(node-001) $ docker node update --availability active node-001
+
+----------------------------------------------------------------------
+
+Для swarm создается свой тип сети
+
+(node-00*) $ docker network ls
+ETWORK ID     NAME              DRIVER    SCOPE
+6380cd2ee134   bridge            bridge    local
+b82502d1d985   docker_gwbridge   bridge    local
+1933a3f884b2   host              host      local
+5axpn1uqenf2   ingress           overlay   swarm
+47e1573c1e65   none              null      local
+
+
+
+
+(node-003) $ docker swarm leave

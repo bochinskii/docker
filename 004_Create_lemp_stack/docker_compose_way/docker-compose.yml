@@ -1,25 +1,32 @@
 version: "3.9"
 
-#networks:
-#  lemp:
-#    driver: bridge
+networks:
+  lemp:
+    external: true
+    driver: bridge
 
 services:
 
   mysql:
-    image: mysql
+    image: mysql:8.0
+    networks:
+      - lemp
     volumes:
       - mysqlconfigd:/etc/mysql/conf.d
       - mysqldbs:/var/lib/mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: SuperperP@$$w0rd
+    #environment:
+    #  MYSQL_ROOT_PASSWORD: P@ssw0rd12345
+    env_file:
+      - ./mysql.env
     healthcheck:
       test: mysqladmin ping -h 127.0.0.1 -u root --password=$$MYSQL_ROOT_PASSWORD
-      interval: 5s
+      interval: 10s
       retries: 10
 
   phpfpm:
     image: php:8.0-fpm
+    networks:
+      - lemp
     volumes:
       - site:/var/www/html
     depends_on:
@@ -27,7 +34,9 @@ services:
         condition: service_healthy
 
   nginx:
-    image: nginx
+    image: nginx:1.21
+    networks:
+      - lemp
     ports:
       - 80:80
     volumes:
@@ -38,19 +47,24 @@ services:
 
 
   phpmyadmin:
-    image: phpmyadmin
+    image: phpmyadmin:5.2
+    networks:
+      - lemp
     ports:
       - 8080:80
     environment:
       PMA_HOST: mysql
-    volumes:
-      - site:/var/www/html
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
 
 
 volumes:
   mysqldbs:
+    external: true
   mysqlconfigd:
+    external: true
   site:
+    external: true
   nginxconfigd:
+    external: true
