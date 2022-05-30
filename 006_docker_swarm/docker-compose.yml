@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: P@ssw0rd12345
+    healthcheck:
+      test: mysqladmin ping -h 127.0.0.1 -u root --password=$$MYSQL_ROOT_PASSWORD
+      interval: 10s
+      retries: 10
+
+  phpfpm:
+    image: php:8.0-fpm
+    volumes:
+      - site:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.22
+    ports:
+      - 80:80
+    volumes:
+      - site:/var/www/html
+      - nginxconfigd:/etc/nginx/conf.d
+    depends_on:
+      - phpfpm
+
+  phpmyadmin:
+    image: phpmyadmin:5.2
+    ports:
+      - 8080:80
+    environment:
+      PMA_HOST: mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+
+volumes:
+  site:
+    driver_opts:
+      type: "nfs"
+      o: "addr=192.168.0.104,nolock,soft,rw"
+      device: ":/var/nfs/swarm/site"
+  nginxconfigd:
+    driver_opts:
+      type: "nfs"
+      o: "addr=192.168.0.104,nolock,soft,rw"
+      device: ":/var/nfs/swarm/nginxconfigd"

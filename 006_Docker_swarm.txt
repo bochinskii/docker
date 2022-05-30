@@ -1,3 +1,14 @@
+-----------------------------
+Docker swarm. Общие принципы.
+----------------------------
+
+$ mkdir ./006_docker_swarm; cd ./006_docker_swarm
+
+Мы будем использовать vagrant для удобства управления виртуальными машинами.
+
+Для того, чтобы использовать vagrant, его нужно установить и написать Vagrantfile.
+Ознакомится с Vagrantfile'ом можно в директории с проектом
+
 $ vagrant up
 
 $ vagrant status
@@ -7,14 +18,30 @@ node-001                  running (virtualbox)
 node-002                  running (virtualbox)
 node-003                  running (virtualbox)
 
+---------------------------------------------------------------------------
+Заметка:
+
+Ознакомится с руководствоп пользователя Vagrant можно у меня на
+GitHub'е (bochinskii/vagrant).
+
+-----------------------------------------------------------------
+
+Docker swarm представлен лидером (Leader), рабочими (Workers) и менеджерами (Managers).
+
+Нода Leader управляет кластером и занимается рапределением клиентских соединений.
+
+Ноды Managers'ы - это те ноды, которые могут стать лидером, если текущий "потушится".
+Это нужно для failover'а. Ведь, если Leader "потушится", то весь кластер развалится.
+
+Ноды Workers - это те ноды, которые являются "рабочими лошадками". На них запускаются сервисы.
+
+В современном мире, не используются Workers'ы т.к. в этом нет смысла. Если подымают кластер,
+то из всех нод делают managers'ов.
+
+
 $ vagrant ssh node-001
 
-$ vagrant halth
-
-
-
-
-
+Инициализируем кластер на ноде node-001
 
 (node-001) $ docker swarm init --advertise-addr 192.168.0.201
 Swarm initialized: current node (jqdm0jqwra2kp4153pp5rai1x) is now a manager.
@@ -25,6 +52,8 @@ To add a worker to this swarm, run the following command:
 
 To add a manager to this swarm, run 'docker swarm join-token manager' and follow the instructions.
 
+Как мы видим есть токен для Workers'ов и дополнительно можно вывести токен для Managers'ов.
+Будем использовать токен для managers'ов.
 
 (node-001) $ docker swarm join-token manager
 To add a manager to this swarm, run the following command:
@@ -32,7 +61,7 @@ To add a manager to this swarm, run the following command:
     docker swarm join --token SWMTKN-1-4vh8l0txml190xmlz3lxoyqcveizf0i5rugs5yt9s7i2d3fzjp-12ik073sknxqjcs3g1u8ncrja 192.168.0.201:2377
 
 
-
+Присоединяем остальные ноды к рою в качестве Managers'ов
 
 (node-002) $ docker swarm join --token SWMTKN-1-4vh8l0txml190xmlz3lxoyqcveizf0i5rugs5yt9s7i2d3fzjp-12ik073sknxqjcs3g1u8ncrja 192.168.0.201:2377
 This node joined a swarm as a manager.
@@ -42,7 +71,7 @@ This node joined a swarm as a manager.
 
 
 
-Посмотреть состояние кластера (можно на любой ноде)
+Посмотреть состояние кластера (можно на любой ноде, которая является manager'ом)
 
 (node-00*) $ docker node ls
 ID                            HOSTNAME   STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
@@ -51,8 +80,52 @@ j1gz7sgs3y36791nqz0rb4rc5     node-002   Ready     Active         Reachable     
 svi979yjgea1l9kscvmuj0e7n     node-003   Ready     Active         Reachable        20.10.16
 
 
+Вот так можно посмотреть состояние нод (кто кем является).
 
+$ docker node inspect node-001 | grep ManagerStatus -A 3
+        "ManagerStatus": {
+            "Leader": true,
+            "Reachability": "reachable",
+            "Addr": "192.168.0.201:2377"
+        }
 
+$ docker node inspect node-002 | grep ManagerStatus -A 3
+        "ManagerStatus": {
+            "Reachability": "reachable",
+            "Addr": "192.168.0.202:2377"
+        }
+
+$ docker node inspect node-003 | grep ManagerStatus -A 3
+        "ManagerStatus": {
+            "Reachability": "reachable",
+            "Addr": "192.168.0.203:2377"
+
+-------------------------------------------------------------------------------------------
+Заметка:
+
+Если вы по какой-то причине решите "разжаловть" Manager'а до Worker'а (хотя причин для этого нет)
+
+(node-00*)$ docker node demote node-003
+Manager node-003 demoted in the swarm.
+
+Как мы видим node-003 стала обычным Worker'ом.
+
+(node-00*) $ docker node ls
+ID                            HOSTNAME   STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+jqdm0jqwra2kp4153pp5rai1x     node-001   Ready     Active         Leader           20.10.16
+j1gz7sgs3y36791nqz0rb4rc5 *   node-002   Ready     Active         Reachable        20.10.16
+svi979yjgea1l9kscvmuj0e7n     node-003   Ready     Active                          20.10.16
+
+Если вы поняли, что психанули и решили вернуть ноду в стан Managers'ов
+
+(node-00*) $ docker node promote node-003
+
+$ docker node ls
+ID                            HOSTNAME   STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+jqdm0jqwra2kp4153pp5rai1x     node-001   Ready     Active         Leader           20.10.16
+j1gz7sgs3y36791nqz0rb4rc5 *   node-002   Ready     Active         Reachable        20.10.16
+svi979yjgea1l9kscvmuj0e7n     node-003   Ready     Active         Reachable        20.10.16
+------------------------------------------------------------------------------------------
 
 -----------------------------------------------------------------
 Заметка:
@@ -67,7 +140,7 @@ svi979yjgea1l9kscvmuj0e7n     node-003   Ready     Active         Reachable     
 -------------------------------------------------------------------------
 Заметка:
 
-Чтобы лидер роя не запускал контейнеры, а был только управляющей машино
+Чтобы лидер роя не запускал контейнеры, а был только управляющей машиной
 
 (node-001) $ docker node update --availability drain node-001
 
@@ -78,6 +151,10 @@ svi979yjgea1l9kscvmuj0e7n     node-003   Ready     Active         Reachable     
 
 ----------------------------------------------------------------------
 
+----------------------------------------------------------------------
+Замтка:
+
+
 Для swarm создается свой тип сети
 
 (node-00*) $ docker network ls
@@ -87,7 +164,390 @@ b82502d1d985   docker_gwbridge   bridge    local
 1933a3f884b2   host              host      local
 5axpn1uqenf2   ingress           overlay   swarm
 47e1573c1e65   none              null      local
+--------------------------------------------------------------------------
 
+
+Выполнить комманду запуска контейнера, по факту сервиса
+
+(node-00*) $ docker service create --replicas 1 --publish 80:80 --name web nginx:1.22
+s4j2dnyhaj5qf1zlu9qcgyv66
+overall progress: 1 out of 1 tasks
+1/1: running   [==================================================>]
+verify: Service converged
+
+
+Запущенный сервис можно посмотреть
+
+(node-00*) $ docker service ls
+ID             NAME      MODE         REPLICAS   IMAGE        PORTS
+s4j2dnyhaj5q   web       replicated   1/1        nginx:1.22
+
+На какой именно машине роя он запущен? А вот
+
+(node-00*) $ docker service ps web
+ID             NAME      IMAGE        NODE       DESIRED STATE   CURRENT STATE           ERROR     PORTS
+gzixq420tcca   web.1     nginx:1.22   node-002   Running         Running 4 minutes ago
+
+------------------------------------------------------------------------------------------
+Заметка:
+
+Посмотреть запущенный контейнер с помощью комманды ниже, можно только на той машине,
+на которой он запущен. В нашем случае node-002.
+
+(node-002) $ docker ps
+CONTAINER ID   IMAGE        COMMAND                  CREATED         STATUS         PORTS     NAMES
+136c592bd2f0   nginx:1.22   "/docker-entrypoint.…"   2 minutes ago   Up 2 minutes   80/tcp    web.1.gzixq420tcca15inhgrtpgjv3
+
+-----------------------------------------------------------------------------------------
+
+Сделать scale out (увеличить количество сервисов) до 2 сервисов на "живую"
+
+(node-00*) $ docker service scale web=2
+web scaled to 2
+overall progress: 2 out of 2 tasks
+1/2: running   [==================================================>]
+2/2: running   [==================================================>]
+verify: Service converged
+
+Как мы видим, сервис запустился еще на одной ноде
+
+(node-00*) $ docker service ps web
+$ docker service ps web
+ID             NAME      IMAGE        NODE       DESIRED STATE   CURRENT STATE            ERROR     PORTS
+gzixq420tcca   web.1     nginx:1.22   node-002   Running         Running 10 minutes ago
+q1nm6kvjq6xm   web.2     nginx:1.22   node-001   Running         Running 38 seconds ago
+
+Давайте проверим наш сервис с nginx
+
+$ curl -I 192.168.0.201
+HTTP/1.1 200 OK
+Server: nginx/1.21.6
+Date: Mon, 30 May 2022 06:40:37 GMT
+Content-Type: text/html
+Content-Length: 615
+Last-Modified: Tue, 25 Jan 2022 15:03:52 GMT
+Connection: keep-alive
+ETag: "61f01158-267"
+Accept-Ranges: bytes
+
+$ curl -I 192.168.0.202
+HTTP/1.1 200 OK
+Server: nginx/1.21.6
+Date: Mon, 30 May 2022 06:40:39 GMT
+Content-Type: text/html
+Content-Length: 615
+Last-Modified: Tue, 25 Jan 2022 15:03:52 GMT
+Connection: keep-alive
+ETag: "61f01158-267"
+Accept-Ranges: bytes
+
+$ curl -I 192.168.0.203
+HTTP/1.1 200 OK
+Server: nginx/1.21.6
+Date: Mon, 30 May 2022 06:40:40 GMT
+Content-Type: text/html
+Content-Length: 615
+Last-Modified: Tue, 25 Jan 2022 15:03:52 GMT
+Connection: keep-alive
+ETag: "61f01158-267"
+Accept-Ranges: bytes
+
+Как мы видим, на какою бы мы ноду не заходили все работает. Это происходит потому, что
+все ноды в рое перенаправляют клиентские запросы на ноду лидера.
+
+Лидер, в свою очередь, занимается равномерным перераспределением клиентских
+соединений на ноды роя. Т.е. Leader отслеживает состояние ресурсов нод и перенаправляет
+соединения или создает реплики сервисов там, где свободных ресурсов больше.
+
+
+Вот так удалить сервис
+
+(node-00*) $ docker service rm web
+
+
+
+-----------------
+Работа Failover'а
+-----------------
+
+Запустим сервис с 2-мя репликами
+
+(node-00*) $ docker service create --replicas 2 --publish 80:80 --name web nginx:1.22
+
+(node-00*) $ docker service ps web
+ID             NAME      IMAGE        NODE       DESIRED STATE   CURRENT STATE           ERROR     PORTS
+tgru4gig54po   web.1     nginx:1.22   node-001   Running         Running 8 seconds ago
+mdf5b6cmxsb0   web.2     nginx:1.22   node-002   Running         Running 8 seconds ago
+
+
+Что будет, если мы "потушим" одну ноду, на которой запущен сервис. Пока "потушим" ту ноду,
+которая НЕ является лидером. В нашем случае это node-002
+
+$ vagrant halt node-002
+
+(node-00*) $ docker node ls
+ID                            HOSTNAME   STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+jqdm0jqwra2kp4153pp5rai1x *   node-001   Ready     Active         Leader           20.10.16
+j1gz7sgs3y36791nqz0rb4rc5     node-002   Ready     Active         Unreachable      20.10.16
+svi979yjgea1l9kscvmuj0e7n     node-003   Ready     Active         Reachable        20.10.16
+
+
+Как мы видим, сервис "потушен" на ноде, которая недоступна (node-002) и запустился
+новый сервис на другой ноде (node-003). Это произошло т.к. у нас указано, что у сервиса
+должно быть 2 реплики.
+
+(node-00*) $ docker service ps web
+ID             NAME        IMAGE        NODE       DESIRED STATE   CURRENT STATE            ERROR     PORTS
+tgru4gig54po   web.1       nginx:1.22   node-001   Running         Running 2 minutes ago
+0v7dks37h64l   web.2       nginx:1.22   node-003   Running         Running 12 seconds ago
+mdf5b6cmxsb0    \_ web.2   nginx:1.22   node-002   Shutdown        Running 2 minutes ago
+
+Запустим "потушенную" ноду
+
+$ vagrant up node-002
+
+Теперь нода node-002 доступна снова
+
+(node-00*) $ docker node ls
+ID                            HOSTNAME   STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+jqdm0jqwra2kp4153pp5rai1x *   node-001   Ready     Active         Leader           20.10.16
+j1gz7sgs3y36791nqz0rb4rc5     node-002   Ready     Active         Reachable        20.10.16
+svi979yjgea1l9kscvmuj0e7n     node-003   Ready     Active         Reachable        20.10.16
+
+
+Но сервис так и остался на другой ноде (node-003).
+
+(node-00*) $ docker service ps web
+ID             NAME        IMAGE        NODE       DESIRED STATE   CURRENT STATE             ERROR     PORTS
+tgru4gig54po   web.1       nginx:1.22   node-001   Running         Running 5 minutes ago
+0v7dks37h64l   web.2       nginx:1.22   node-003   Running         Running 3 minutes ago
+mdf5b6cmxsb0    \_ web.2   nginx:1.22   node-002   Shutdown        Shutdown 27 seconds ago
+
+Как мы видим failover сработал и клиенты могли даже ничего и не заметить.
+
+
+
+
+А что будет если "потушить" лидера т.е. node-001
+
+$ vagrant halt node-001
+
+Как мы видим, лидером стала другая нода - node-002. Это потому, что при присоединении нод к рою,
+мы указали эти ноды как Managers'ы. Если бы они были Workers'ами, то рой на этом этапе "развалился".
+
+(node-00*) $ docker node ls
+ID                            HOSTNAME   STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+jqdm0jqwra2kp4153pp5rai1x     node-001   Unknown   Active         Unreachable      20.10.16
+j1gz7sgs3y36791nqz0rb4rc5     node-002   Unknown   Active         Leader           20.10.16
+svi979yjgea1l9kscvmuj0e7n *   node-003   Unknown   Active         Reachable        20.10.16
+
+Сервис "переехал на другую работающую ноду"
+
+(node-00*) $ docker service ps web
+ID             NAME        IMAGE        NODE       DESIRED STATE   CURRENT STATE                ERROR     PORTS
+vp9jqr6trji7   web.1       nginx:1.22   node-002   Running         Running 57 seconds ago
+tgru4gig54po    \_ web.1   nginx:1.22   node-001   Shutdown        Running 25 minutes ago
+0v7dks37h64l   web.2       nginx:1.22   node-003   Running         Running about a minute ago
+mdf5b6cmxsb0    \_ web.2   nginx:1.22   node-002   Shutdown        Shutdown 20 minutes ago
+
+Подымем обратно ноду node-001
+
+$ vagrant up node-001
+
+Как мы видим нода node-001 вернулась, но "лидерство" осталось за нодой node-002
+
+(node-00*) $ docker node ls
+ID                            HOSTNAME   STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+jqdm0jqwra2kp4153pp5rai1x     node-001   Ready     Active         Reachable        20.10.16
+j1gz7sgs3y36791nqz0rb4rc5     node-002   Ready     Active         Leader           20.10.16
+svi979yjgea1l9kscvmuj0e7n *   node-003   Ready     Active         Reachable        20.10.16
+
+
+А давайте "потушим" две ноды
+
+$ vagrant halt node-001
+
+$ vagrant halt node-002
+
+Как мы видим рой "расспался" т.е. нужно более половины нодов которые являются managers'ами.
+
+(node-00*) $ docker node ls
+
+Error response from daemon: rpc error: code = Unknown desc = The swarm does not have a leader. It's possible that too few managers are online. Make sure more than half of the managers are online.
+
+Запустим ноды
+
+$ vagrant up node-001
+
+$ vagrant up node-002
+
+Как мы видим, рой восстановился.
+
+(node-00*) $ docker node ls
+ID                            HOSTNAME   STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+jqdm0jqwra2kp4153pp5rai1x     node-001   Ready     Active         Reachable        20.10.16
+j1gz7sgs3y36791nqz0rb4rc5     node-002   Ready     Active         Reachable        20.10.16
+svi979yjgea1l9kscvmuj0e7n *   node-003   Ready     Active         Leader           20.10.16
+
+
+Теперь можно удалить сервис
+
+(node-00*) $ docker service rm web
+
+--------------------------------------------------------------------
+Заметка:
+
+Если хотите запустить сервис на всех нодах в рое. Это делается с указание режима работы
+сервиса (mode)
+
+(node-00*) $ docker service create --mode=global --publish 80:80 --name web nginx
+
+------------------------------------------------------------------------------
+
+
+-------------------
+Обновление сервисов
+-------------------
+
+Запустим сервис
+
+(node-00*) $ docker service create --replicas 3 --publish 80:80 --name web httpd
+59ir87mfacgi30npvr3ad0tyu
+overall progress: 3 out of 3 tasks
+1/3: running   [==================================================>]
+2/3: running   [==================================================>]
+3/3: running   [==================================================>]
+verify: Service converged
+
+Мы видим, что там установлен apache
+
+$ curl -I 192.168.0.201
+HTTP/1.1 200 OK
+Date: Mon, 30 May 2022 06:50:20 GMT
+Server: Apache/2.4.53 (Unix)
+Last-Modified: Mon, 11 Jun 2007 18:53:14 GMT
+ETag: "2d-432a5e4a73a80"
+Accept-Ranges: bytes
+Content-Length: 45
+Content-Type: text/html
+
+Теперь, стоит задача поочередного обновления сервисов. Для примера просто поменяем apache на nginx.
+Сервис будет обновляться поочередно (--update-parallelism 1) с задержкой в 5 секунд (--update-delay 5s
+
+(node-00*) $ docker service update --update-parallelism 1 --update-delay 5s --image nginx:1.22 web
+web
+overall progress: 3 out of 3 tasks
+1/3: running   [==================================================>]
+2/3: running   [==================================================>]
+3/3: running   [==================================================>]
+verify: Service converged
+
+Проверяем. Да теперь это nginx.
+
+$ curl -I 192.168.0.201
+HTTP/1.1 200 OK
+Server: nginx/1.22.0
+Date: Mon, 30 May 2022 06:52:49 GMT
+Content-Type: text/html
+Content-Length: 615
+Last-Modified: Mon, 23 May 2022 23:59:19 GMT
+Connection: keep-alive
+ETag: "628c1fd7-267"
+Accept-Ranges: bytes
+
+Вся суть в том, что сервис обновился поочередно и никто из клиентов не заметил
+т.к. простоя сервиса не было.
+
+
+
+---------------------------------------------------------------
+Использование меток (labels) при распределении реплик сервисов
+--------------------------------------------------------------
+
+Мы уже затрагивали тему того, что Leader следит за состоянием ресурсов нод и запускает
+реплики на тех нодах у которых больше свободных ресурсов. Это поведение можно изменить
+с помощью меток (labels)
+
+
+Есть метки внутренние (node.labesl) и пользовательские (engine.labels).
+
+Вот пример использования внутренних меток. Запустим сервис на node-001.
+
+(node-00*) $ docker service create --constraint 'node.hostname == node-001' --name web-nginx --replicas 1 --publish 8081:80 nginx:1.22
+
+(node-00*) $ docker service ps web-nginx
+ID             NAME          IMAGE        NODE       DESIRED STATE   CURRENT STATE            ERROR     PORTS
+pqtc11n7itz5   web-nginx.1   nginx:1.22   node-001   Running         Running 26 seconds ago
+
+
+А вот пример запуска сервиса с использованием пользовательской метки
+
+Определим метку и ее значение напрмиер, на node-002
+
+(node-00*) $ docker node update --label-add ROOM=N1 node-002
+
+(node-00*) $ docker node inspect --pretty node-002 | grep Labels -A 1
+Labels:
+ - ROOM=N1
+
+(node-00*) $ docker service create --constraint 'node.labels.ROOM == N1' --name web-httpd --replicas 1 --publish 8082:80 httpd
+
+(node-00*) $ docker service ps web-httpd
+ID             NAME          IMAGE          NODE       DESIRED STATE   CURRENT STATE            ERROR     PORTS
+e0uhkpva6a14   web-httpd.1   httpd:latest   node-002   Running         Running 16 seconds ago
+
+
+Не забываем удалять сервисы, если они вам не нужны
+
+(node-00*) $ docker service rm web-nginx
+
+(node-00*) $ docker service rm web-httpd
+
+
+
+--------------------------
+Использование Docker Stack
+--------------------------
+
+
+По сути Docker Stack - это интеграция Composer в Swarm.
+
+
+------------------------------------------------------------------------
+Бонус:
+
+Настройка NFS
+
+$ sudo apt-get update
+
+$ sudo apt-get install nfs-kernel-server
+
+
+
+$ sudo mkdir /var/nfs/swarm/nginxconfigd -p
+
+$ sudo mkdir /var/nfs/swarm/site -p
+
+
+$ sudo chown nobody:nogroup /var/nfs/swarm/nginxconfigd
+
+$ sudo chown nobody:nogroup /var/nfs/swarm/site
+
+
+$ nano /etc/exports
+
+/var/nfs/swarm/nginxconfigd 192.168.0.0/24(rw,sync,no_subtree_check)
+/var/nfs/swarm/site 192.168.0.0/24(rw,sync,no_subtree_check)
+
+$ sudo systemctl restart nfs-kernel-server
+
+
+
+$ sudo cp ./files/*.conf /var/nfs/swarm/nginxconfigd/
+
+$ sudo cp ./files/in* /var/nfs/swarm/site/
+
+----------------------------------------------------------------------------
 
 
 
