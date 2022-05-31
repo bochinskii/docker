@@ -152,8 +152,7 @@ svi979yjgea1l9kscvmuj0e7n     node-003   Ready     Active         Reachable     
 ----------------------------------------------------------------------
 
 ----------------------------------------------------------------------
-Замтка:
-
+Заметка:
 
 Для swarm создается свой тип сети
 
@@ -505,18 +504,29 @@ e0uhkpva6a14   web-httpd.1   httpd:latest   node-002   Running         Running 1
 
 
 
---------------------------
-Использование Docker Stack
---------------------------
+------------------------------------------
+Использование Docker Stack на примере lemp
+------------------------------------------
 
 
 По сути Docker Stack - это интеграция Composer в Swarm.
 
+Мы будем разворачивать LEMP. Для этого нам понадобятся файлы конфигурации nginx
+(default.conf) и пример файлов сайта (index.html, info.php). Собственно, то что мы делали
+ранее.
+
+Как вы понимаете, эти файлы должны быть доступны для всех нод роя. Это можно сделать
+путем создания локальных volumes'ов на каждой ноде и копирования туда всех необходимых файлов.
+
+Но это не наш путь, будем делать правильно. Мы создадим NFS хранилища, скопируем
+туда необходимые файлы. Далее, при создании сервисов, смонтируем эти
+хранилища в созданные и подсоединенные к сервисам volumes'ы.
+
 
 ------------------------------------------------------------------------
-Бонус:
+Бонус: Настройка NFS
 
-Настройка NFS
+На хосте
 
 $ sudo apt-get update
 
@@ -541,14 +551,141 @@ $ nano /etc/exports
 
 $ sudo systemctl restart nfs-kernel-server
 
+Вот таким образом создаются и монтируются в docker-compose.yml файле данные volumes'ы
 
+volumes:
+  site:
+    driver_opts:
+      type: "nfs"
+      o: "addr=192.168.0.104,nolock,soft,rw"
+      device: ":/var/nfs/swarm/site"
+  nginxconfigd:
+    driver_opts:
+      type: "nfs"
+      o: "addr=192.168.0.104,nolock,soft,rw"
+      device: ":/var/nfs/swarm/nginxconfigd"
 
-$ sudo cp ./files/*.conf /var/nfs/swarm/nginxconfigd/
-
-$ sudo cp ./files/in* /var/nfs/swarm/site/
 
 ----------------------------------------------------------------------------
 
+Скопируем все необходимые файлы в созданные хранилища
 
+$ sudo cp ./files/default.conf /var/nfs/swarm/nginxconfigd/
+
+$ sudo cp ./files/{index.html,info.php} /var/nfs/swarm/site/
+
+Разворачивать сервисы будем с помощью docker-compose.yml файлы. С ним можно ознакомится
+в директории с проектом.
+
+Если вы посмотрите на Vagrantfile, то увидите, что мы уже перекинули данный файл во время
+развертывания виртуальных машин для роя.
+
+Начинаем развертывание
+
+(node-00*) $ cd ~/lemp
+
+(node-00*) $ docker stack deploy --compose-file docker-compose.yml lemp
+
+Creating network lemp_default
+Creating service lemp_phpfpm
+Creating service lemp_nginx
+Creating service lemp_phpmyadmin
+Creating service lemp_mysql
+
+(node-00*) $ docker stack ls
+NAME      SERVICES   ORCHESTRATOR
+lemp      4          Swarm
+
+Как мы видим сервисы поднялись. Хотя что-то не получалось с nginx'ом, но потом сервис поднялся.
+
+(node-00*) $ docker stack ps lemp
+ID             NAME                IMAGE            NODE       DESIRED STATE   CURRENT STATE            ERROR                       PORTS
+p691gmgwybp8   lemp_mysql.1        mysql:8.0        node-002   Running         Running 18 minutes ago
+13rumud7sezb   lemp_nginx.1        nginx:1.22       node-003   Running         Running 19 minutes ago
+bhd5762uhf11    \_ lemp_nginx.1    nginx:1.22       node-003   Shutdown        Failed 19 minutes ago    "task: non-zero exit (1)"
+7o4sepuxqthv    \_ lemp_nginx.1    nginx:1.22       node-003   Shutdown        Failed 19 minutes ago    "task: non-zero exit (1)"
+pk5fszfbjmzb    \_ lemp_nginx.1    nginx:1.22       node-001   Shutdown        Failed 19 minutes ago    "task: non-zero exit (1)"
+q3wcrtd2dut0    \_ lemp_nginx.1    nginx:1.22       node-001   Shutdown        Failed 19 minutes ago    "task: non-zero exit (1)"
+u4jdyfgf0x94   lemp_phpfpm.1       php:8.0-fpm      node-002   Running         Running 19 minutes ago
+lj9q1w12z9m6   lemp_phpmyadmin.1   phpmyadmin:5.2   node-003   Running         Running 18 minutes ago
+
+
+(node-00*) $ docker stack services lemp
+ID             NAME              MODE         REPLICAS   IMAGE            PORTS
+8slui2qa5rpa   lemp_mysql        replicated   1/1        mysql:8.0
+4lmbkworlr2a   lemp_nginx        replicated   1/1        nginx:1.22       *:80->80/tcp
+fq0vysmf6q66   lemp_phpfpm       replicated   1/1        php:8.0-fpm
+ksgfqdn56d0g   lemp_phpmyadmin   replicated   1/1        phpmyadmin:5.2   *:8080->80/tcp
+
+
+Протестируем.
+
+
+$ curl -I 192.168.0.201/info.php
+HTTP/1.1 200 OK
+Server: nginx/1.22.0
+Date: Tue, 31 May 2022 04:54:59 GMT
+Content-Type: text/html; charset=UTF-8
+Connection: keep-alive
+X-Powered-By: PHP/8.0.19
+
+
+Вот так удалить стэк сервисов.
+
+(node-00*) $ docker stack rm lemp
+Removing service lemp_mysql
+Removing service lemp_nginx
+Removing service lemp_phpfpm
+Removing service lemp_phpmyadmin
+Removing network lemp_default
+
+---------------------------------------------------------------------------------------
+Заметка:
+
+Покинуть рой можно вот так. Например, мы хотим чтобы node-003 покинула рой
+
+(node-00*) $ docker node ls
+ID                            HOSTNAME   STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+jqdm0jqwra2kp4153pp5rai1x *   node-001   Ready     Active         Leader           20.10.16
+j1gz7sgs3y36791nqz0rb4rc5     node-002   Ready     Active         Reachable        20.10.16
+svi979yjgea1l9kscvmuj0e7n     node-003   Ready     Active         Reachable        20.10.16
+
+Сперва, нужно "разжаловать" ноду до Worker'а
+
+(node-00*) $ docker node demote node-003
+Manager node-003 demoted in the swarm.
+
+На той ноде, которую нужно вывести из роя нужно выполнить комманду
 
 (node-003) $ docker swarm leave
+Node left the swarm.
+
+
+(node-00*) $ docker node ls
+ID                            HOSTNAME   STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+jqdm0jqwra2kp4153pp5rai1x *   node-001   Ready     Active         Leader           20.10.16
+j1gz7sgs3y36791nqz0rb4rc5     node-002   Ready     Active         Reachable        20.10.16
+svi979yjgea1l9kscvmuj0e7n     node-003   Down      Active                          20.10.16
+
+Удалить ноду из роя
+
+(node-00*) $ docker node rm node-003
+node-003
+
+(node-00*) $ docker node ls
+ID                            HOSTNAME   STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
+jqdm0jqwra2kp4153pp5rai1x *   node-001   Ready     Active         Leader           20.10.16
+j1gz7sgs3y36791nqz0rb4rc5     node-002   Ready     Active         Reachable        20.10.16
+
+
+------------------------------------------------------------------------------
+
+
+Ну и не забудьте удалить виртуальные машины созданные с помощью vagrant
+
+$ vagrant destroy
+
+
+
+
+----------------------------

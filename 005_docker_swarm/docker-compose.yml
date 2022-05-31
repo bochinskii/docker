@@ -4,6 +4,8 @@ services:
 
   mysql:
     image: mysql:8.0
+    deploy:
+      replicas: 1
     environment:
       MYSQL_ROOT_PASSWORD: P@ssw0rd12345
     healthcheck:
@@ -13,14 +15,18 @@ services:
 
   phpfpm:
     image: php:8.0-fpm
+    deploy:
+      replicas: 1
     volumes:
       - site:/var/www/html
     depends_on:
-      mysql:
-        condition: service_healthy
+      - mysql
+
 
   nginx:
     image: nginx:1.22
+    deploy:
+      replicas: 1
     ports:
       - 80:80
     volumes:
@@ -31,13 +37,15 @@ services:
 
   phpmyadmin:
     image: phpmyadmin:5.2
+    deploy:
+      replicas: 1
     ports:
       - 8080:80
     environment:
       PMA_HOST: mysql
     depends_on:
-      mysql:
-        condition: service_healthy
+      - mysql
+
 
 
 volumes:

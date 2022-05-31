@@ -1,2 +1,3 @@
 secret/*
-006_docker_swarm/.vagrant/*
+005_docker_swarm/.vagrant/*
+006_rocinate_lemp/*
