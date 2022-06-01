@@ -1,5 +1,6 @@
 FROM mysql:8.0
 
-COPY ./init.sql /tmp
-
-CMD [ "mysqld", "--init-file=/tmp/init.sql" ]
+#
+# Copy custome *.cnf file
+#
+COPY ./rocinante.cnf /etc/mysql/conf.d

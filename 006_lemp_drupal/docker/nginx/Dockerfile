@@ -1,4 +1,4 @@
-FROM nginx:1.21
+FROM nginx:1.22-alpine
 
 #
 # Copy configs
@@ -10,20 +10,13 @@ COPY ./configs/nginx.conf /etc/nginx/
 #
 # TLS
 #
-COPY ./configs/rocinante.crt /etc/nginx/tls/
 
-COPY ./configs/rocinante.key /etc/nginx/tls/
+RUN apk upgrade --update-cache --available && apk add openssl && rm -rf /var/cache/apk/*
 
-RUN chmod 0400 /etc/nginx/tls/rocinante.key && openssl dhparam -out /etc/nginx/tls/dhparam.pem 2048
-
-#
-# Install Drupal 9
-#
-RUN mkdir -p /var/www/html && curl -Lo /tmp/drupal.tar.gz https://www.drupal.org/download-latest/tar.gz \
-                           && tar -xzvf /tmp/drupal.tar.gz -C /var/www/html --strip-components=1 \
-                           && chmod -R 755 /var/www/html/sites/default/ \
-                           && cp /var/www/html/sites/default/default.settings.php /var/www/html/sites/default/settings.php \
-                           && chmod 666 /var/www/html/sites/default/settings.php
+RUN mkdir /etc/nginx/tls && openssl dhparam -out /etc/nginx/tls/dhparam.pem 2048 \
+                         && openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                         -keyout /etc/nginx/tls/rocinante.key -out /etc/nginx/tls/rocinante.crt \
+                         -subj "/C=RU/ST= /L=Donets/O= /OU= /CN=rocinante.in"
 
 
-EXPOSE 80 443
+EXPOSE 80 443 8080 4343
