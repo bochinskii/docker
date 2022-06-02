@@ -16,7 +16,10 @@ RUN apk upgrade --update-cache --available && apk add openssl && rm -rf /var/cac
 RUN mkdir /etc/nginx/tls && openssl dhparam -out /etc/nginx/tls/dhparam.pem 2048 \
                          && openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
                          -keyout /etc/nginx/tls/rocinante.key -out /etc/nginx/tls/rocinante.crt \
-                         -subj "/C=RU/ST= /L=Donets/O= /OU= /CN=rocinante.in"
+                         -subj "/C=RU/ST= /L=Donets/O= /OU= /CN=rocinante.in" \
+                         && chown -R nginx: /etc/nginx/tls
 
 
 EXPOSE 80 443 8080 4343
+
+USER nginx

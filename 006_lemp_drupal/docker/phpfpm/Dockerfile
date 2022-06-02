@@ -20,7 +20,8 @@ RUN apk upgrade --update-cache --available && apk add libxml2-dev \
                                            curl-dev \
                                            oniguruma-dev \
                                            gmp-dev \
-                                           icu-dev
+                                           icu-dev \
+                                           && rm -rf /var/cache/apk/*
 
 #
 # Add  extantions
@@ -41,3 +42,6 @@ RUN docker-php-ext-install xml \
 #    && chown -R www-data: /var/www/html/modules \
 #    && chown -R www-data: /var/www/html/sites \
 #    && chown -R www-data: /var/www/html/themes
+
+# Switch to that user
+USER www-data

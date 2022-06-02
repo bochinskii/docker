@@ -10,3 +10,6 @@ COPY ./drupal.cnf /etc/mysql/conf.d
 # Optional database dump
 #
 #COPY ./drupaldb.sql /docker-entrypoint-initdb.d/
+
+# Switch to that user
+USER mysql
