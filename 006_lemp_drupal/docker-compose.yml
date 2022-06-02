@@ -21,8 +21,8 @@ services:
       - ./mysql.env
     healthcheck:
       test: mysqladmin ping -h 127.0.0.1 -u root --password=$$MYSQL_ROOT_PASSWORD
-      interval: 10s
-      retries: 10
+      interval: 20s
+      retries: 20
 
   phpfpm:
     build: ./docker/phpfpm
@@ -58,6 +58,7 @@ services:
       - lemp
     environment:
       PMA_HOST: mysql
+      UPLOAD_LIMIT: 2048M
     volumes:
       - phpmyadmindata:/var/www/html
     depends_on:

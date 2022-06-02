@@ -30,3 +30,14 @@ RUN docker-php-ext-install xml \
                            mbstring \
                            gmp \
                            intl
+
+#
+# Custome Site
+#
+#COPY ./drupal.tar.bz /tmp/drupal.tar.bz
+
+#RUN rm -fr /var/www/html/ && mkdir /var/www/html \
+#    && tar -xvf /tmp/drupal.tar.bz -C /var/www/html --strip-components=1 \
+#    && chown -R www-data: /var/www/html/modules \
+#    && chown -R www-data: /var/www/html/sites \
+#    && chown -R www-data: /var/www/html/themes
