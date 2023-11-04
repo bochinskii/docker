@@ -94,6 +94,169 @@ $ docker container exec -it phpmyadmin cat /etc/hosts
 
 Все, можно проверять. Все работет.
 
+
+
+----------------------------------------------------------------
+Тоже самое, но вместо volumes исполтьзует файловую систему хоста
+-----------------------------------------------------------------
+
+Создадим все необходимые папки:
+
+
+$ tree
+.
+├── db
+├── html
+│   ├── index.html
+│   └── info.php
+├── mysql
+└── nginx
+    └── default.conf
+
+
+
+
+
+Запустим контейнер mysql сервера
+
+
+$ docker container run --name mysql -e MYSQL_ROOT_PASSWORD=P@ssw0rd12345 -v /home/denisb/docker/mysql:/etc/mysql/conf.d -v /home/denisb/docker/db:/var/lib/mysql -d mysql:8.0
+
+
+После запуска контейнера, мы видим, что в папке db у нас появились файлы из контейнера.
+Они появилис, ао-первых из-за того, что мы указали привязку папки контейнера к нашей папке db (-v /home/denisb/docker/db/:/var/lib/mysql). 
+Во-вторых, из-за того, что папка db была изначально пустая. Если бы у нас были файлы в этой папке, то наша папка (db) перезаписала своим содержимым папку контейнера (/var/lib/mysql).
+
+$ tree
+.
+├── db
+│   ├── auto.cnf
+│   ├── binlog.000001
+│   ├── binlog.000002
+│   ├── binlog.index
+│   ├── ca-key.pem
+│   ├── ca.pem
+│   ├── client-cert.pem
+│   ├── client-key.pem
+│   ├── #ib_16384_0.dblwr
+│   ├── #ib_16384_1.dblwr
+│   ├── ib_buffer_pool
+│   ├── ibdata1
+│   ├── ibtmp1
+│   ├── #innodb_redo  [error opening dir]
+│   ├── #innodb_temp  [error opening dir]
+│   ├── mysql  [error opening dir]
+│   ├── mysql.ibd
+│   ├── mysql.sock -> /var/run/mysqld/mysqld.sock
+│   ├── performance_schema  [error opening dir]
+│   ├── private_key.pem
+│   ├── public_key.pem
+│   ├── server-cert.pem
+│   ├── server-key.pem
+│   ├── sys  [error opening dir]
+│   ├── undo_001
+│   └── undo_002
+├── html
+│   ├── index.html
+│   └── info.php
+├── mysql
+└── nginx
+    └── default.conf
+
+
+
+
+Посмотреть что там в контейнере:
+
+$ docker container exec -it mysql mysql -uroot -pP@ssw0rd12345 -h 127.0.0.1
+
+mysql: [Warning] Using a password on the command line interface can be insecure.
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 11
+Server version: 8.0.35 MySQL Community Server - GPL
+
+Copyright (c) 2000, 2023, Oracle and/or its affiliates.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
+4 rows in set (0.00 sec)
+
+mysql> 
+
+
+
+
+
+
+
+Теперь можно запустить php fpm контейнер. Обратите внимание, что мы сделали связь (--link) между
+двумя контенерами. Это для того, чтобы phpfpm знал где mysql сервер.
+
+$ docker container run --name php --link mysql -d -v /home/denisb/docker/html:/var/www/html php:8.0-fpm
+
+
+
+Как мы видим, из-за того, что папка html у нас изначально была не пустая, то содержимое этой папки перезаписало папку /var/www/html в контейнере.
+Есть нюанс, мы видим какой-то не понятный uid (1001). Это из-за того, что мы создали файлы в хостовой файловой системы из под пользователя - denisb (1001).
+
+$ docker container exec -it php ls -l /var/www/html/
+total 8
+-rw-r--r-- 1 1001 1001 21 Nov  4 05:43 index.html
+-rw-r--r-- 1 1001 1001 20 Nov  4 05:44 info.php
+
+
+
+Исправим это дело:
+
+
+$ docker container stop php
+
+$ sudo chown root: /home/denisb/docker/html/*
+
+
+$ docker container start php
+
+$ docker container exec -it php ls -l /var/www/html/
+total 8
+-rw-r--r-- 1 root root 21 Nov  4 05:43 index.html
+-rw-r--r-- 1 root root 20 Nov  4 05:44 info.php
+
+
+
+
+
+
+$ sudo chown root: /home/denisb/docker/nginx/*
+
+
+Теперь запустим web севрер (nginx). Ему тоже нужна связь, но уже с phpfpm контейнером
+
+$ docker container run --name nginx --link php -d -v /home/denisb/docker/html:/var/www/html -v /home/denisb/docker/nginx:/etc/nginx/conf.d -p 80:80 nginx:1.25
+
+
+
+
+
+
+
+
+Теперь, можно в хостовой системе зайти на http://127.0.0.1, http://127.0.0.1/info.php  или http://192.168.1.233/, http://192.168.1.233/info.php и убедиться что все работает.
+
+
+
 --------------------------------------------------------
 Запуск связанных контейнеров в отдельной сети
 ------------------------------------------------
